@@ -1,0 +1,231 @@
+#include <Adafruit_NeoPixel.h>
+
+#define PIN 6
+
+// Parameter 1 = number of pixels in strip
+// Parameter 2 = pin number (most are valid)
+// Parameter 3 = pixel type flags, add together as needed:
+//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
+//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
+//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
+//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(24, PIN, NEO_GRB + NEO_KHZ800);
+
+uint32_t OFF = strip.Color(0, 0, 0);
+uint32_t WHITE = strip.Color(255, 255, 255);
+uint32_t RED = strip.Color(255, 0, 0);
+uint32_t GREEN = strip.Color(0, 255, 0);
+uint32_t BLUE = strip.Color(0, 0, 255);
+
+int defBrightness = 30, maxBrightness = 100;
+int led1 = 0, led2 = 8, led3 = 16, led0 = 0, led12 = 12;
+const int leftPin = 3;     // the number of left pushbutton pin
+const int rightPin = 2;     // the number of right pushbutton pin
+const int animatePin = 7;
+
+
+void setLeds(int Lednum,int num,uint32_t colour); 
+void setup() {
+  strip.begin();
+  strip.setBrightness(10);
+  strip.show(); // Initialize all pixels to 'off'
+  pinMode(leftPin, INPUT); 
+  pinMode(rightPin, INPUT);
+  pinMode(animatePin, INPUT);  
+  Serial.begin(9600); 
+
+  colorWipe(RED, 50);
+  colorWipe(OFF, 50);
+}
+
+#define ON 1
+#define OFF 0
+uint8_t state = OFF;
+
+void loop() {
+
+  if( (digitalRead(animatePin)==LOW) && (state == ON))
+  {
+    colorWipe(OFF,0);
+    state = OFF;
+    delay(1000);
+  }
+
+  if( (digitalRead(animatePin)==LOW) && state == OFF)
+  {
+    colorWipe(OFF, 0);
+    bootUpNPRing();
+    colorWipe(WHITE, 50); 
+    state = ON;
+
+  }
+
+  if(digitalRead(rightPin)== LOW)
+  {
+    Serial.println("{NEXT}");
+    if(state == OFF)
+    {
+      colorWipe(WHITE, 0);
+    }
+    setLeds(led0,12,BLUE); //set n leds to 'COLOUR' starting from ledNum 
+
+    delay(500);
+    colorWipe(WHITE, 0);  // this is to reset the pixels to WHITE after slide change
+    state = ON;   
+
+  }
+  if(digitalRead(leftPin)== LOW)
+  {
+    Serial.println("{PREVIOUS}");
+    if(state == OFF)
+    {
+      colorWipe(WHITE, 0);
+    }
+    setLeds(led12,12,BLUE); //set n leds to 'COLOUR' starting from ledNum
+
+    delay(500);
+    colorWipe(WHITE, 0);  // this is to reset the pixels to WHITE after slide change
+    state = ON;
+  }
+
+
+}
+
+//3 LEDs blink to life, then start rotating, slowly picking up speed till all are lit, then a slightly brighter flash and step into steady state 
+void bootUpNPRing()
+{
+  blinkOn(led1);
+  blinkOn(led2);
+  blinkOn(led3);
+
+  speedUpNPRing();
+
+  /*    //Connect to Bluetooth
+   if(!connectBT())
+   {
+   //Failed connecting. Inform and abort.
+   }
+   */
+  //Connection successful, flash and switch to blue ring
+  flashOnNPRing();
+  delay(1000);
+  colorWipe(BLUE, 50);
+  delay(1000);
+}
+
+void blinkOn(int led)
+{
+  uint8_t time = 1000;
+  while(time>0)
+  {
+    strip.setPixelColor(led, WHITE);
+    strip.show();
+    delay(time);
+    strip.setPixelColor(led, OFF);
+    strip.show();
+    delay(time-=200);
+  }
+  strip.setPixelColor(led, WHITE);
+  strip.show();
+}
+
+void  speedUpNPRing()
+{
+  int traceTime = 40; //time in milliseconds to complete 1 full trace of the ring
+  int trailLength = 2; //no of neopixels in the trail behind the 3 main neopixels
+  colorWipe(OFF, 0);
+  for(int cycle=1; cycle<=40; cycle++)
+  {
+    circleNPRing(traceTime, trailLength);
+    //    if(traceTime > 20)
+    traceTime=floor(traceTime*0.8);
+    if(trailLength < 8)
+      trailLength = (trailLength*1.2);
+
+  }
+}
+
+//Pixels from 0 to 23 to be circled
+void circleNPRing(int traceTime, int trailLength)
+{
+  int totalLED = strip.numPixels();
+  int onSegment1[trailLength], onSegment2[trailLength], onSegment3[trailLength];
+  for (int i=0; i<trailLength; i++)
+  { 
+    onSegment1[i] = (led1+i)%totalLED;
+    strip.setPixelColor(onSegment1[i], WHITE);
+    onSegment2[i] = (led2+i)%totalLED;
+    strip.setPixelColor(onSegment2[i], WHITE);
+    onSegment3[i] = (led3+i)%totalLED;
+    strip.setPixelColor(onSegment3[i], WHITE);
+  }
+  strip.show();
+  //  delay(traceTime);
+
+  //Segments of appropriate trail length is ready and on, now make it traverse one full circle
+  for(int counter=0; counter<totalLED; counter++) 
+  {
+    strip.setPixelColor(onSegment1[0], OFF);
+    strip.setPixelColor(onSegment2[0], OFF);
+    strip.setPixelColor(onSegment3[0], OFF);
+    for (int i=0; i<trailLength; i++)
+    { 
+      onSegment1[i] = (onSegment1[i]+1)%totalLED;
+      strip.setPixelColor(onSegment1[i], WHITE);
+      onSegment2[i] = (onSegment2[i]+1)%totalLED;
+      strip.setPixelColor(onSegment2[i], WHITE);
+      onSegment3[i] = (onSegment3[i]+1)%totalLED;
+      strip.setPixelColor(onSegment3[i], WHITE);
+    }
+    strip.show();
+    delay(traceTime);
+  }
+}
+
+void flashOnNPRing()
+{
+  colorWipe(WHITE, 0);
+  delay(50);
+  for (int i=defBrightness; i<maxBrightness; i+=20)
+  {
+    strip.setBrightness(i);
+    strip.show();
+    delay(30);
+  }
+  for (int i=maxBrightness; i>defBrightness; i-=20)
+  {
+    strip.setBrightness(i);
+    strip.show();
+    delay(20);
+  }
+  strip.setBrightness(defBrightness);
+  strip.show();
+}
+
+/*
+//This function establishes connection with bluetooth module and returns success or failure
+ int connectBT();
+ {
+ 
+ }
+ */
+// Fill the dots one after the other with a color
+void colorWipe(uint32_t c, uint8_t wait) {
+  for(uint16_t i=0; i<strip.numPixels(); i++) {
+    strip.setPixelColor(i, c);
+    strip.show();
+    delay(wait);
+  }
+}
+
+//set n leds to 'COLOUR' starting from ledNum
+void setLeds(int LedNum,int num,uint32_t colour)
+{
+  uint8_t j=0;
+  for(uint16_t i=LedNum; j<num; i++,j++)
+  {
+    strip.setPixelColor(i, colour);
+    strip.show();
+  }
+}  
+
